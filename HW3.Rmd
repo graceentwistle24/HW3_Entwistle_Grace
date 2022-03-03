@@ -1,0 +1,125 @@
+---
+title: "Maps Assignment"
+author: "Grace Entwistle"
+date: "3/3/2022"
+output: html_document
+knit: (function(input_file, encoding) {
+  out_dir <- 'docs';
+  rmarkdown::render(input_file,
+ encoding=encoding,
+ output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r data ,message=FALSE}
+library(dplyr)
+library(lubridate)
+library(tidyverse)
+library(plotly)
+library(leaflet)
+library(maps)
+##read in data
+disasters <- read.csv("C:/Users/grace/OneDrive/Documents/MSStats/STAA566/World Disaster Data 1960-2018.csv")
+
+disasters["country"][disasters["country"] == "United States"] <- "USA"
+disasters["country"][disasters["country"] == "Republic Of Congo"] <- "Democratic Republic of the Congo"
+disasters["country"][disasters["country"] == "Republic Of The Congo"] <- "Democratic Republic of the Congo"
+
+total.disasters <- disasters %>% 
+  group_by(country) %>% 
+  summarise(
+    "TotalNum" = n()
+  )
+
+```
+
+Using the data from NASA's GeoCoded Disaster dataset from 1960 - 2018, I created a map of the World to show which countries had the most disasters overall from 1960-2018. The totals are calculated by adding up each of the disasters, regardless of type, for each country. I am utilizing a plotly map for the interactivity of showing the country and total numebr of disasters when you hover over an area.
+
+The data can be found at this URL:
+*https://sedac.ciesin.columbia.edu/data/set/pend-gdis-1960-2018#:~:text=The%20Geocoded%20Disasters%20(GDIS)%20Dataset,the%20years%201960%20to%202018.*
+
+```{r ggplotly map}
+worldmap  <- map_data("world")
+
+mapdata <- inner_join(total.disasters, worldmap, by = c("country" = "region"))
+
+world_map <- ggplot() +
+  geom_polygon(data = worldmap, 
+               mapping = aes(x = long, y = lat, group = group), 
+               color="black", fill=NA) + theme_minimal() 
+
+world_map <- world_map + 
+    geom_polygon(data = mapdata, 
+               mapping = aes(x = long, y = lat, group = group, fill = TotalNum, 
+                             text = paste("Country :", mapdata$country,
+                           "<br> Total Disasters :", mapdata$TotalNum))) + 
+  scale_fill_viridis_b(option="magma")
+
+ggplotly(world_map, tooltip = "text")
+  
+```
+
+Additionally, I decided to map the United States specifically, and show with markers where each of the disasters have occurred.
+
+```{r leaflet US map}
+US.disasters <- disasters %>% 
+  subset(country == "USA")
+
+leaflet(US.disasters) %>%
+  addTiles() %>% 
+  addMarkers(~longitude, ~latitude)
+
+```
+
+When I created this map, I decided to focus in on one specific state to show the different types of disasters a state has endured from 1960 to 2018. Texas has the most disasters (330), so I zoomed the US map into Texas. The different disasters are shown by the marker color on the below map, and if you click on the marker, you see the year that disaster occurred.
+
+```{r leaflet Texas Map}
+US.disasters %>% 
+  group_by(adm1) %>% 
+  summarise(n())
+
+US.disasters$disastertype <- as.factor(US.disasters$disastertype)
+
+
+# Function to assign colors
+make_color <- function(US.disasters) {
+  sapply(US.disasters$disastertype, function(disastertype) {
+    if(disastertype == "storm") {
+      "green"
+    } else if(disastertype == "flood") {
+      "blue"
+    }  else if(disastertype == "drought") {
+      "orange"
+    } else if(disastertype == "earthquake") {
+      "purple"
+    }  else if(disastertype == "extreme temperature") {
+      "red"
+    }  else if(disastertype == "landslide") {
+      "pink"
+    }  else if(disastertype == "volcanic activity") {
+      "yellow"
+    } else {
+      "white"
+    } })
+}
+
+# create icon format
+icons <- awesomeIcons(
+  icon = 'ios-close',
+  iconColor = 'black',
+  library = 'fa',   
+  markerColor = make_color(US.disasters)
+)
+
+leaflet(US.disasters) %>%
+  setView(lng = -100.46670, lat = 31.40582, zoom = 6) %>% 
+  addTiles() %>% 
+  addAwesomeMarkers(~longitude, ~latitude,
+             label = paste("Type :", US.disasters$disastertype,
+                           " Year :", US.disasters$year),
+             icon=icons)
+
+```
